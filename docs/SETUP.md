@@ -1,92 +1,54 @@
-# Setup Guide for MCP Unified Coding Agent
+# Production Setup Guide: MCP Unified Coding Agent
 
-This guide provides detailed instructions on how to set up and run the MCP Unified Coding Agent.
+This guide ensures your agent is wired up with **real** services and **no mocks**.
 
-## 1. Prerequisites
+## 1. Security & Environment Variables
 
-Before you begin, ensure you have the following installed:
+The agent uses real API tokens. **Never commit your `.env` file.**
 
-*   **Python 3.9+**: Download and install from [python.org](https://www.python.org/downloads/).
-*   **pip**: Python's package installer, usually comes with Python.
-*   **git**: For cloning the repository. Download from [git-scm.com](https://git-scm.com/downloads).
-*   **Node.js and npm/npx**: Required for running some MCP server commands (e.g., GitHub, Supabase, Neon, Vercel MCP servers are often Node.js based). Download from [nodejs.org](https://nodejs.org/en/download/).
+### Required Tokens
+| Variable | Purpose | Where to Get |
+| :--- | :--- | :--- |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | Manage Repos & PRs | [GitHub Settings](https://github.com/settings/tokens) |
+| `NEON_API_KEY` | Provision Databases | [Neon Console](https://console.neon.tech/app/settings/profile) |
+| `VERCEL_TOKEN` | Deploy Applications | [Vercel Tokens](https://vercel.com/account/tokens) |
+| `SUPABASE_URL` | DB Management | Supabase Project Settings |
+| `SUPABASE_SERVICE_ROLE_KEY` | Admin DB Access | Supabase Project Settings |
 
-## 2. Installation
+## 2. Real-World Wiring
 
-1.  **Clone the repository**:
-    Open your terminal or command prompt and run:
-    ```bash
-    git clone https://github.com/your-username/mcp-coding-agent.git
-    cd mcp-coding-agent
-    ```
+The agent communicates with these services via the **Model Context Protocol (MCP)** using `stdio` transport. It launches real server processes using `npx`.
 
-2.  **Install Python dependencies**:
-    Navigate to the cloned directory and install the required Python packages:
-    ```bash
-    pip install mcp pydantic requests
-    ```
+### Verification
+Run the validation script to ensure your environment can launch the MCP servers and discover their tools:
+```bash
+python validate_connectors.py
+```
 
-## 3. Configuration
+## 3. Implementation Details
 
-The agent requires API keys and credentials for interacting with GitHub, Supabase, Neon, and Vercel. These should be stored as environment variables for security.
-
-1.  **Create a `.env` file**:
-    In the root directory of the `mcp-coding-agent` project, create a file named `.env`.
-
-2.  **Add your credentials**:
-    Populate the `.env` file with your API keys and connection strings. Replace the placeholder values with your actual credentials.
-
-    ```dotenv
-    GITHUB_TOKEN="your_github_personal_access_token"
-    SUPABASE_API_KEY="your_supabase_anon_key"
-    SUPABASE_URL="your_supabase_project_url"
-    NEON_API_KEY="your_neon_api_key"
-    VERCEL_API_TOKEN="your_vercel_api_token"
-    ```
-
-    *   **GitHub Token**: Generate a personal access token with appropriate `repo` and `workflow` scopes from your [GitHub Developer Settings](https://github.com/settings/tokens).
-    *   **Supabase API Key & URL**: Find these in your Supabase project settings under "API".
-    *   **Neon API Key**: Obtain this from your Neon dashboard.
-    *   **Vercel API Token**: Generate an API token from your [Vercel Account Settings](https://vercel.com/account/tokens).
+- **`core/mcp_client.py`**: Uses the official `mcp` Python SDK. It manages the lifecycle of the `npx` subprocesses and handles the JSON-RPC communication.
+- **`core/agent.py`**: Contains the orchestration logic. It passes real data (like Neon connection strings) between different MCP tools (like Vercel environment variable creation).
+- **`main.py`**: The execution engine that triggers the multi-service workflow.
 
 ## 4. Running the Agent
 
-To run the demo workflow, execute the `main.py` script:
+1. **Install official MCP SDK**:
+   ```bash
+   pip install mcp pydantic requests python-dotenv
+   ```
+2. **Set your environment variables**:
+   ```bash
+   export GITHUB_PERSONAL_ACCESS_TOKEN="your_token"
+   # ... set others
+   ```
+3. **Execute**:
+   ```bash
+   python main.py
+   ```
 
-```bash
-python main.py
-```
-
-This will simulate a full-stack development workflow, including:
-
-*   Connecting to MCP servers (simulated).
-*   Creating a GitHub repository.
-*   Provisioning a Neon PostgreSQL database.
-*   Applying a database schema via Supabase MCP.
-*   Deploying the application to Vercel.
-
-## 5. Extending the Agent
-
-### Adding New MCP Connectors
-
-To integrate a new service that supports the Model Context Protocol:
-
-1.  **Identify the MCP Server command**: Most MCP servers are available as `npm` packages. For example, `@newservice/mcp-server`.
-2.  **Update `core/agent.py`**: In the `initialize_connectors` method, add an entry for your new service with its corresponding `npx` command.
-    ```python
-    connectors = {
-        # ... existing connectors
-        "newservice": ["npx", "-y", "@newservice/mcp-server"]
-    }
-    ```
-3.  **Implement workflow logic**: In `core/agent.py`, add new methods or extend `run_full_stack_workflow` to utilize the tools exposed by your new MCP server.
-
-### Developing Custom Tools
-
-The agent is designed to be extensible. You can create your own custom tools and expose them via a local MCP server. Refer to the [Model Context Protocol documentation](https://modelcontextprotocol.io/docs/develop/build-server) for guidance on building custom MCP servers.
-
-## 6. Troubleshooting
-
-*   **`mcp` package not found**: Ensure you have run `pip install mcp pydantic requests`.
-*   **API Key issues**: Double-check your `.env` file for correct API keys and ensure they have the necessary permissions.
-*   **MCP Server connection errors**: Verify that the `npx` commands for the MCP servers are correct and that Node.js is properly installed.
+The agent will then:
+1. Launch the GitHub MCP server and create a repo.
+2. Launch the Neon MCP server and provision a Postgres instance.
+3. Launch the Supabase MCP server and apply migrations to the Neon instance.
+4. Launch the Vercel MCP server, create a project, and wire up the Neon DB URL.
